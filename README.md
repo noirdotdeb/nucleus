@@ -2,6 +2,10 @@
 
 > A rendering engine built from absolute scratch — not because the world needs another one, but because I refused to start using a framework before I understood exactly what one does.
 
+
+**Status:** 🧪 Early build — `createElement` + `render` in progress. Nothing below is a promise, it's a plan.
+
+
 ## The problem
 
 Hand-write enough DOM code and you'll hit the same wall every time: you change a piece of data, and now it's on *you* to remember every single place on screen that depends on it and update each one by hand. Miss a spot and the screen quietly lies — it shows something that isn't true anymore. That's not a skill issue, it's a structural one. Every framework you've ever heard of exists to solve exactly this.
