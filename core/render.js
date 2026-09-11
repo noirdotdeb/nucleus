@@ -2,6 +2,11 @@ export function render(vnode, container) {
     // Create the real HTML element from the vnode's tag.
     const element = document.createElement(vnode.tag);
 
+    // Go through every prop and apply it to the real HTML element.
+    Object.entries(vnode.props).forEach(([name, value]) => {
+        element.setAttribute(name, value);
+    });
+
     // Go through every child inside the vnode.
     vnode.children.forEach(child => {
         // If the child is text, create a text node.
