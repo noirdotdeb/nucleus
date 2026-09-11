@@ -7,12 +7,14 @@ const Counter = ({ label }) => {
 
     const increment = () => setCount(prev => prev + 1);
     const decrement = () => setCount(prev => prev - 1);
+    const reset = () => setCount(0);
 
     return createElement('div', { class: 'counter' }, [
         createElement('h2', {}, [label]),
         createElement('p', {}, [`Count: ${getCount()}`]),
         createElement('button', { onclick: increment }, ['+']),
-        createElement('button', { onclick: decrement }, ['-'])
+        createElement('button', { onclick: decrement }, ['-']),
+        createElement('button', { onclick: reset }, ['Reset'])
     ]);
 };
 
