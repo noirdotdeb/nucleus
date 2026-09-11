@@ -1,46 +1,46 @@
 import { createElement } from './core/createElement.js';
+import { createState } from './core/state.js';
 import { render } from './core/render.js';
-import { createState, subscribe } from './core/state.js';
-import { diff } from './core/diff.js';
 
-const app = document.getElementById('app');
-
-const [getCount, setCount] = createState(0);
-
-
-// Component
+// Owns its own count via createState — this is the only part of the
+// tree that changes when you click a button.
 function Counter() {
+    const [getCount, setCount] = createState(0);
+
+    function increment() {
+        setCount(getCount() + 1);
+    }
+
+    function decrement() {
+        setCount(getCount() - 1);
+    }
+
     return createElement('div', { class: 'counter' }, [
-
-        createElement('h1', {}, [
-            `Count: ${getCount()}`
-        ]),
-
-        createElement('button', {}, [
-            'Increment'
-        ])
-
+        createElement('h2', {}, ['Counter']),
+        createElement('p', {}, [`Count: ${getCount()}`]),
+        createElement('button', { onclick: increment }, ['+']),
+        createElement('button', { onclick: decrement }, ['-'])
     ]);
 }
 
+// Deliberately has nothing to do with the counter's state. Its output
+// is identical every render, so diffing it should never touch the DOM
+// — this is what you'll use to prove nodes survive an update.
+function UnaffectedSection() {
+    return createElement('div', { class: 'unaffected' }, [
+        createElement('h2', {}, ['This section never changes']),
+        createElement('p', { id: 'unaffected-paragraph' }, [
+            'If Nucleus is working, this exact DOM node survives every counter click.'
+        ])
+    ]);
+}
 
-// Keep the currently rendered vnode.
-let currentVNode = Counter();
+function App() {
+    return createElement('div', { class: 'app' }, [
+        createElement('h1', {}, ['Nucleus']),
+        createElement(Counter, {}, []),
+        createElement(UnaffectedSection, {}, [])
+    ]);
+}
 
-// Initial render.
-render(currentVNode, app);
-
-
-// When state changes:
-//
-// 1. Create the new vnode.
-// 2. Compare it with the old vnode.
-// 3. Update only what changed.
-// 4. Save the new vnode.
-subscribe(getCount, () => {
-    const newVNode = Counter();
-
-    diff(currentVNode, newVNode, app.firstChild);
-
-    currentVNode = newVNode;
-});
+render(createElement(App, {}, []), document.getElementById('app'));
