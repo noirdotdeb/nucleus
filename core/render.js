@@ -8,6 +8,8 @@ export const eventNameFromProp = (name) => name.slice(2).toLowerCase();
 const applyProp = (element, name, value) => {
     if (isEventProp(name)) {
         element.addEventListener(eventNameFromProp(name), value);
+    } else if (name === 'value' || name === 'checked') {
+        element[name] = value;
     } else {
         element.setAttribute(name, value);
     }
@@ -58,7 +60,6 @@ export function render(vnode, container) {
 
     registerUpdateScheduler(update);
 
-
     flushEffects();
 }
 
@@ -75,6 +76,5 @@ function update() {
 
     currentVNode = newVNode;
 
- 
     flushEffects();
 }
