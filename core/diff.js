@@ -1,6 +1,28 @@
 import { createDom, isEventProp, eventNameFromProp } from './render.js';
 import { beginComponentRender, endComponentRender } from './state.js';
 
+
+export function unmount(vnode) {
+    if (!vnode) return;
+    
+    
+    if (typeof vnode.tag === 'function') {
+        if (vnode.hooks) {
+            vnode.hooks.forEach(hook => {
+    
+                if (hook && typeof hook === 'object' && typeof hook.cleanup === 'function') {
+                    hook.cleanup();
+                }
+            });
+        }
+        
+        unmount(vnode.renderedVNode);
+    } else {
+        
+        (vnode.children || []).forEach(child => unmount(child));
+    }
+}
+
 export function diff(oldVNode, newVNode, domNode) {
     if (!oldVNode || !newVNode || !domNode) return;
 
@@ -8,7 +30,9 @@ export function diff(oldVNode, newVNode, domNode) {
     const newIsComponent = typeof newVNode.tag === 'function';
 
     if (oldIsComponent || newIsComponent) {
+        
         if (oldVNode.tag !== newVNode.tag) {
+            unmount(oldVNode);
             replaceNode(newVNode, domNode);
             return;
         }
@@ -27,6 +51,7 @@ export function diff(oldVNode, newVNode, domNode) {
     }
 
     if (oldVNode.tag !== newVNode.tag) {
+        unmount(oldVNode);HTML node
         replaceNode(newVNode, domNode);
         return;
     }
@@ -81,8 +106,6 @@ function diffChildren(parentDom, oldChildren = [], newChildren = []) {
     const oldKeyed = new Map();
     const oldUnkeyed = [];
 
-    
-    
     oldChildren.forEach((oldChild, i) => {
         const childDom = domChildren[i];
         if (oldChild && typeof oldChild === 'object' && oldChild.key != null) {
@@ -95,19 +118,16 @@ function diffChildren(parentDom, oldChildren = [], newChildren = []) {
     let unkeyedIndex = 0;
     const newDomNodes = []; 
 
-    
     for (let i = 0; i < newChildren.length; i++) {
         const newChild = newChildren[i];
         let match = null;
 
-        
         if (newChild && typeof newChild === 'object' && newChild.key != null) {
             if (oldKeyed.has(newChild.key)) {
                 match = oldKeyed.get(newChild.key);
                 oldKeyed.delete(newChild.key); 
             }
         } else {
-            
             if (unkeyedIndex < oldUnkeyed.length) {
                 match = oldUnkeyed[unkeyedIndex];
                 unkeyedIndex++;
@@ -115,10 +135,8 @@ function diffChildren(parentDom, oldChildren = [], newChildren = []) {
         }
 
         if (!match) {
-            
             newDomNodes.push(createDom(newChild));
         } else {
-            
             const oldChild = match.vnode;
             const childDom = match.dom;
 
@@ -132,6 +150,7 @@ function diffChildren(parentDom, oldChildren = [], newChildren = []) {
                 }
                 newDomNodes.push(childDom);
             } else if (oldIsText !== newIsText) {
+                if (!oldIsText) unmount(oldChild); // NEW: Unmount element swapped for text
                 const freshDom = createDom(newChild);
                 newDomNodes.push(freshDom);
             } else {
@@ -143,22 +162,22 @@ function diffChildren(parentDom, oldChildren = [], newChildren = []) {
 
  
     oldKeyed.forEach(match => {
+        unmount(match.vnode);
         if (match.dom && match.dom.parentNode) match.dom.parentNode.removeChild(match.dom);
     });
     
     while (unkeyedIndex < oldUnkeyed.length) {
         const match = oldUnkeyed[unkeyedIndex];
+        unmount(match.vnode);
         if (match.dom && match.dom.parentNode) match.dom.parentNode.removeChild(match.dom);
         unkeyedIndex++;
     }
 
- 
     for (let i = 0; i < newDomNodes.length; i++) {
         const expectedDom = newDomNodes[i];
         const currentDomAtI = parentDom.childNodes[i];
         
         if (currentDomAtI !== expectedDom) {
- 
             if (currentDomAtI) {
                 parentDom.insertBefore(expectedDom, currentDomAtI);
             } else {
