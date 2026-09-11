@@ -1,29 +1,19 @@
-// diff(oldVNode, newVNode, domNode) compares an old vnode tree against
-// a new one and patches the real DOM in place — it never throws
-// domNode away and rebuilds from scratch unless the node genuinely has
-// to change (a different tag, or text swapped for an element).
-
 import { createDom, isEventProp, eventNameFromProp } from './render.js';
 import { beginComponentRender, endComponentRender } from './state.js';
 
-// NEW: Recursively hunts down removed components and runs their cleanup functions
 export function unmount(vnode) {
     if (!vnode) return;
     
-    // If it's a component, run its cleanups
     if (typeof vnode.tag === 'function') {
         if (vnode.hooks) {
             vnode.hooks.forEach(hook => {
-                // Effects are stored as objects { deps, cleanup }
                 if (hook && typeof hook === 'object' && typeof hook.cleanup === 'function') {
                     hook.cleanup();
                 }
             });
         }
-        // A component delegates its children to renderedVNode, so unmount that too
         unmount(vnode.renderedVNode);
     } else {
-        // If it's a standard HTML element, recurse into its children
         (vnode.children || []).forEach(child => unmount(child));
     }
 }
@@ -35,9 +25,8 @@ export function diff(oldVNode, newVNode, domNode) {
     const newIsComponent = typeof newVNode.tag === 'function';
 
     if (oldIsComponent || newIsComponent) {
-        // Tag changed (e.g. <Counter> swapped for <Timer>)
         if (oldVNode.tag !== newVNode.tag) {
-            unmount(oldVNode); // NEW: Destroy the old component's effects
+            unmount(oldVNode);
             replaceNode(newVNode, domNode);
             return;
         }
@@ -56,7 +45,7 @@ export function diff(oldVNode, newVNode, domNode) {
     }
 
     if (oldVNode.tag !== newVNode.tag) {
-        unmount(oldVNode); // NEW: Destroy whatever was inside the old HTML node
+        unmount(oldVNode);
         replaceNode(newVNode, domNode);
         return;
     }
@@ -81,10 +70,13 @@ function diffProps(element, oldProps = {}, newProps = {}) {
     for (const [name, oldVal] of Object.entries(oldProps)) {
         const stillExists = name in newProps;
         const isEvent = isEventProp(name);
+        const isProp = name === 'value' || name === 'checked';
 
-        if (!stillExists || newProps[name] !== oldVal) {
+        if (!stillExists || (isProp ? element[name] !== newProps[name] : newProps[name] !== oldVal)) {
             if (isEvent) {
                 element.removeEventListener(eventNameFromProp(name), oldVal);
+            } else if (isProp) {
+                element[name] = name === 'checked' ? false : '';
             } else if (!stillExists) {
                 element.removeAttribute(name);
             }
@@ -93,11 +85,21 @@ function diffProps(element, oldProps = {}, newProps = {}) {
 
     for (const [name, newVal] of Object.entries(newProps)) {
         const oldVal = oldProps[name];
-        const changed = oldVal !== newVal;
+        const isEvent = isEventProp(name);
+        const isProp = name === 'value' || name === 'checked';
+        
+        // Critical fix for controlled inputs: Compare against live DOM property.
+        // When typing, element.value already matches newVal, preventing cursor jumps!
+        const changed = isProp ? element[name] !== newVal : oldVal !== newVal;
 
         if (changed) {
-            if (isEventProp(name)) {
+            if (isEvent) {
+                if (oldVal) {
+                    element.removeEventListener(eventNameFromProp(name), oldVal);
+                }
                 element.addEventListener(eventNameFromProp(name), newVal);
+            } else if (isProp) {
+                element[name] = newVal;
             } else {
                 element.setAttribute(name, newVal);
             }
@@ -155,7 +157,7 @@ function diffChildren(parentDom, oldChildren = [], newChildren = []) {
                 }
                 newDomNodes.push(childDom);
             } else if (oldIsText !== newIsText) {
-                if (!oldIsText) unmount(oldChild); // NEW: Unmount element swapped for text
+                if (!oldIsText) unmount(oldChild);
                 const freshDom = createDom(newChild);
                 newDomNodes.push(freshDom);
             } else {
@@ -165,7 +167,6 @@ function diffChildren(parentDom, oldChildren = [], newChildren = []) {
         }
     }
 
-    // NEW: Unmount nodes that were completely deleted from the list
     oldKeyed.forEach(match => {
         unmount(match.vnode);
         if (match.dom && match.dom.parentNode) match.dom.parentNode.removeChild(match.dom);
