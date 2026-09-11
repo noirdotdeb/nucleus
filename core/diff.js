@@ -1,24 +1,29 @@
+// diff(oldVNode, newVNode, domNode) compares an old vnode tree against
+// a new one and patches the real DOM in place — it never throws
+// domNode away and rebuilds from scratch unless the node genuinely has
+// to change (a different tag, or text swapped for an element).
+
 import { createDom, isEventProp, eventNameFromProp } from './render.js';
 import { beginComponentRender, endComponentRender } from './state.js';
 
-
+// NEW: Recursively hunts down removed components and runs their cleanup functions
 export function unmount(vnode) {
     if (!vnode) return;
     
-    
+    // If it's a component, run its cleanups
     if (typeof vnode.tag === 'function') {
         if (vnode.hooks) {
             vnode.hooks.forEach(hook => {
-    
+                // Effects are stored as objects { deps, cleanup }
                 if (hook && typeof hook === 'object' && typeof hook.cleanup === 'function') {
                     hook.cleanup();
                 }
             });
         }
-        
+        // A component delegates its children to renderedVNode, so unmount that too
         unmount(vnode.renderedVNode);
     } else {
-        
+        // If it's a standard HTML element, recurse into its children
         (vnode.children || []).forEach(child => unmount(child));
     }
 }
@@ -30,9 +35,9 @@ export function diff(oldVNode, newVNode, domNode) {
     const newIsComponent = typeof newVNode.tag === 'function';
 
     if (oldIsComponent || newIsComponent) {
-        
+        // Tag changed (e.g. <Counter> swapped for <Timer>)
         if (oldVNode.tag !== newVNode.tag) {
-            unmount(oldVNode);
+            unmount(oldVNode); // NEW: Destroy the old component's effects
             replaceNode(newVNode, domNode);
             return;
         }
@@ -51,7 +56,7 @@ export function diff(oldVNode, newVNode, domNode) {
     }
 
     if (oldVNode.tag !== newVNode.tag) {
-        unmount(oldVNode);HTML node
+        unmount(oldVNode); // NEW: Destroy whatever was inside the old HTML node
         replaceNode(newVNode, domNode);
         return;
     }
@@ -160,7 +165,7 @@ function diffChildren(parentDom, oldChildren = [], newChildren = []) {
         }
     }
 
- 
+    // NEW: Unmount nodes that were completely deleted from the list
     oldKeyed.forEach(match => {
         unmount(match.vnode);
         if (match.dom && match.dom.parentNode) match.dom.parentNode.removeChild(match.dom);
