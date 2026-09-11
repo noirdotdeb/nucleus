@@ -22,10 +22,7 @@ function Counter({ label }) {
 }
 
 function App() {
-    
     const [getItems, setItems] = createState(['A', 'B', 'C']);
-    
-    
     const [getShowWarning, setShowWarning] = createState(true);
 
     function toggleWarning() {
@@ -35,7 +32,6 @@ function App() {
     function removeMiddleItem() {
         const items = getItems();
         if (items.length > 1) {
-    
             const newItems = items.filter((_, index) => index !== 1);
             setItems(newItems);
         }
@@ -46,19 +42,20 @@ function App() {
         
         createElement('h3', {}, ['1. Conditional Rendering']),
         createElement('button', { onclick: toggleWarning }, ['Toggle Warning']),
-        
         getShowWarning() && createElement('p', { style: 'color: red;' }, [
             'Warning: This element can be completely unmounted.'
         ]),
         
         createElement('hr', {}, []),
 
-        createElement('h3', {}, ['2. List Rendering (The Bug)']),
+        createElement('h3', {}, ['2. List Rendering (Fixed)']),
         createElement('button', { onclick: removeMiddleItem }, ['Remove Middle Item']),
         
-        
         createElement('div', { class: 'list' }, [
-            getItems().map(item => createElement(Counter, { label: `Counter ${item}` }, []))
+            getItems().map(item => 
+                
+                createElement(Counter, { key: item, label: `Counter ${item}` }, [])
+            )
         ])
     ]);
 }
