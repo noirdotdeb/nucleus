@@ -1,13 +1,15 @@
 import { createElement } from './core/createElement.js';
+
 import { render } from './core/render.js';
 
-const heading = createElement('h1', {}, ['Hello']);
+function Welcome(props) {
+    return createElement('h1', {}, [`Hello ${props.name}`]);
+}
 
-const paragraph = createElement('p', {}, ['Welcome to Nucleus']);
-
-const appVNode = createElement('div', {}, [
-    heading,
-    paragraph
-]);
+const appVNode = createElement(
+    Welcome,
+    { name: 'Nucleus' },
+    []
+);
 
 render(appVNode, document.getElementById('app'));

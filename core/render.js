@@ -1,4 +1,15 @@
 export function render(vnode, container) {
+
+    // If the vnode tag is a function,
+    // treat it as a functional component.
+    if (typeof vnode.tag === 'function') {
+        const componentVNode = vnode.tag(vnode.props);
+
+        render(componentVNode, container);
+
+        return;
+    }
+
     // Create the real HTML element from the vnode's tag.
     const element = document.createElement(vnode.tag);
 
@@ -9,12 +20,14 @@ export function render(vnode, container) {
 
     // Go through every child inside the vnode.
     vnode.children.forEach(child => {
+
         // If the child is text, create a text node.
         if (typeof child === 'string') {
             const text = document.createTextNode(child);
 
             // Add the text inside the current element.
             element.appendChild(text);
+
         } else {
             // If the child is another vnode,
             // render it inside the current element.
