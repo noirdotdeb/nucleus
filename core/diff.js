@@ -1,97 +1,169 @@
-let currentInstance = null;
-let cursor = 0;
-let scheduleUpdate = null;
-let pendingEffects = []; // NEW: Queue for effects waiting for the DOM to paint
+import { createDom, isEventProp, eventNameFromProp } from './render.js';
+import { beginComponentRender, endComponentRender } from './state.js';
 
-export function beginComponentRender(vnode) {
-    if (!vnode) throw new Error("A valid vnode must be provided to begin rendering.");
-    vnode.hooks ??= [];
-    currentInstance = vnode;
-    cursor = 0;
-}
+export function diff(oldVNode, newVNode, domNode) {
+    if (!oldVNode || !newVNode || !domNode) return;
 
-export function endComponentRender() {
-    currentInstance = null;
-    cursor = 0;
-}
+    const oldIsComponent = typeof oldVNode.tag === 'function';
+    const newIsComponent = typeof newVNode.tag === 'function';
 
-export function registerUpdateScheduler(fn) {
-    if (typeof fn !== 'function') {
-        throw new TypeError("Update scheduler must be a function.");
-    }
-    scheduleUpdate = fn;
-}
+    if (oldIsComponent || newIsComponent) {
+        if (oldVNode.tag !== newVNode.tag) {
+            replaceNode(newVNode, domNode);
+            return;
+        }
 
-export function createState(initialValue) {
-    if (!currentInstance) {
-        throw new Error("createState can only be called inside a component's render execution.");
-    }
+        newVNode.hooks = oldVNode.hooks ?? [];
 
-    const instance = currentInstance;
-    const slot = cursor++;
+        beginComponentRender(newVNode);
+        const newRendered = newVNode.tag(newVNode.props ?? {});
+        endComponentRender();
 
-    if (slot === instance.hooks.length) {
-        const value = typeof initialValue === 'function' ? initialValue() : initialValue;
-        instance.hooks.push(value);
+        diff(oldVNode.renderedVNode, newRendered, domNode);
+
+        newVNode.renderedVNode = newRendered;
+        newVNode.dom = newRendered.dom;
+        return;
     }
 
-    const getValue = () => instance.hooks[slot];
+    if (oldVNode.tag !== newVNode.tag) {
+        replaceNode(newVNode, domNode);
+        return;
+    }
 
-    const setValue = (newValue) => {
-        const currentValue = instance.hooks[slot];
-        const nextValue = typeof newValue === 'function' ? newValue(currentValue) : newValue;
+    diffProps(domNode, oldVNode.props, newVNode.props);
+    diffChildren(domNode, oldVNode.children, newVNode.children);
 
-        if (!Object.is(currentValue, nextValue)) {
-            instance.hooks[slot] = nextValue;
-            if (scheduleUpdate) {
-                scheduleUpdate();
+    newVNode.dom = domNode;
+}
+
+function replaceNode(newVNode, domNode) {
+    const parent = domNode.parentNode;
+    if (!parent) return; 
+    
+    const freshDom = createDom(newVNode);
+    parent.replaceChild(freshDom, domNode);
+}
+
+function diffProps(element, oldProps = {}, newProps = {}) {
+    if (oldProps === newProps) return;
+
+    for (const [name, oldVal] of Object.entries(oldProps)) {
+        const stillExists = name in newProps;
+        const isEvent = isEventProp(name);
+
+        if (!stillExists || newProps[name] !== oldVal) {
+            if (isEvent) {
+                element.removeEventListener(eventNameFromProp(name), oldVal);
+            } else if (!stillExists) {
+                element.removeAttribute(name);
             }
         }
-    };
-
-    return [getValue, setValue];
-}
-
-// NEW: The Effect Hook
-export function createEffect(callback, deps) {
-    if (!currentInstance) throw new Error("createEffect must be called inside a component.");
-
-    const instance = currentInstance;
-    const slot = cursor++;
-
-    const prevHook = instance.hooks[slot];
-    const prevDeps = prevHook ? prevHook.deps : undefined;
-
-    // Determine if we need to run the effect based on the dependency array
-    let hasChanged = true;
-    if (prevDeps && deps) {
-        // If every item is exactly the same, nothing changed. Otherwise, it changed.
-        hasChanged = deps.some((dep, i) => !Object.is(dep, prevDeps[i]));
     }
 
-    // If there is no dependency array (runs every render), or if deps changed
-    if (hasChanged || !prevDeps) {
-        // Push to the queue to run AFTER the real DOM is updated
-        pendingEffects.push(() => {
-            // 1. Run the old cleanup function if it exists
-            if (prevHook && typeof prevHook.cleanup === 'function') {
-                prevHook.cleanup();
+    for (const [name, newVal] of Object.entries(newProps)) {
+        const oldVal = oldProps[name];
+        const changed = oldVal !== newVal;
+
+        if (changed) {
+            if (isEventProp(name)) {
+                element.addEventListener(eventNameFromProp(name), newVal);
+            } else {
+                element.setAttribute(name, newVal);
             }
-            
-            // 2. Run the new effect, and save whatever it returns as the new cleanup function
-            const cleanup = callback();
-            instance.hooks[slot] = { deps, cleanup };
-        });
-    } else {
-        // Nothing changed, carry the old hook object forward
-        instance.hooks[slot] = prevHook;
+        }
     }
 }
 
-// NEW: Called by render.js once the real HTML has been fully patched
-export function flushEffects() {
-    // Copy the queue and reset it immediately, in case an effect triggers another render
-    const effectsToRun = pendingEffects;
-    pendingEffects = [];
-    effectsToRun.forEach(fn => fn());
+function diffChildren(parentDom, oldChildren = [], newChildren = []) {
+    const domChildren = [...parentDom.childNodes];
+    
+    const oldKeyed = new Map();
+    const oldUnkeyed = [];
+
+    
+    
+    oldChildren.forEach((oldChild, i) => {
+        const childDom = domChildren[i];
+        if (oldChild && typeof oldChild === 'object' && oldChild.key != null) {
+            oldKeyed.set(oldChild.key, { vnode: oldChild, dom: childDom });
+        } else {
+            oldUnkeyed.push({ vnode: oldChild, dom: childDom });
+        }
+    });
+
+    let unkeyedIndex = 0;
+    const newDomNodes = []; 
+
+    
+    for (let i = 0; i < newChildren.length; i++) {
+        const newChild = newChildren[i];
+        let match = null;
+
+        
+        if (newChild && typeof newChild === 'object' && newChild.key != null) {
+            if (oldKeyed.has(newChild.key)) {
+                match = oldKeyed.get(newChild.key);
+                oldKeyed.delete(newChild.key); 
+            }
+        } else {
+            
+            if (unkeyedIndex < oldUnkeyed.length) {
+                match = oldUnkeyed[unkeyedIndex];
+                unkeyedIndex++;
+            }
+        }
+
+        if (!match) {
+            
+            newDomNodes.push(createDom(newChild));
+        } else {
+            
+            const oldChild = match.vnode;
+            const childDom = match.dom;
+
+            const isPrimitive = (node) => typeof node === 'string' || typeof node === 'number';
+            const oldIsText = isPrimitive(oldChild);
+            const newIsText = isPrimitive(newChild);
+
+            if (oldIsText && newIsText) {
+                if (String(oldChild) !== String(newChild)) {
+                    childDom.textContent = newChild;
+                }
+                newDomNodes.push(childDom);
+            } else if (oldIsText !== newIsText) {
+                const freshDom = createDom(newChild);
+                newDomNodes.push(freshDom);
+            } else {
+                diff(oldChild, newChild, childDom);
+                newDomNodes.push(newChild.dom);
+            }
+        }
+    }
+
+ 
+    oldKeyed.forEach(match => {
+        if (match.dom && match.dom.parentNode) match.dom.parentNode.removeChild(match.dom);
+    });
+    
+    while (unkeyedIndex < oldUnkeyed.length) {
+        const match = oldUnkeyed[unkeyedIndex];
+        if (match.dom && match.dom.parentNode) match.dom.parentNode.removeChild(match.dom);
+        unkeyedIndex++;
+    }
+
+ 
+    for (let i = 0; i < newDomNodes.length; i++) {
+        const expectedDom = newDomNodes[i];
+        const currentDomAtI = parentDom.childNodes[i];
+        
+        if (currentDomAtI !== expectedDom) {
+ 
+            if (currentDomAtI) {
+                parentDom.insertBefore(expectedDom, currentDomAtI);
+            } else {
+                parentDom.appendChild(expectedDom);
+            }
+        }
+    }
 }
