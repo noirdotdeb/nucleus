@@ -1,4 +1,4 @@
-import { registerUpdateScheduler, beginComponentRender, endComponentRender } from './state.js';
+import { registerUpdateScheduler, beginComponentRender, endComponentRender, flushEffects } from './state.js';
 import { diff } from './diff.js';
 
 export const isEventProp = (name) => name.startsWith('on');
@@ -57,6 +57,9 @@ export function render(vnode, container) {
     currentVNode = vnode;
 
     registerUpdateScheduler(update);
+
+
+    flushEffects();
 }
 
 function update() {
@@ -71,4 +74,7 @@ function update() {
     diff(currentVNode, newVNode, currentVNode.dom);
 
     currentVNode = newVNode;
+
+ 
+    flushEffects();
 }
